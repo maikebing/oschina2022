@@ -13,7 +13,7 @@ namespace oschina2022
         {
             var objId = Environment.ExpandEnvironmentVariables("%objId%");
             var g_user_id = Environment.ExpandEnvironmentVariables("%g_user_id%");
-            var oscid = Environment.ExpandEnvironmentVariables("%oscid%");
+            var oscid = Environment.ExpandEnvironmentVariables("%oscid%").Trim('"') ;
             var pow_batch = 5;
             if (int.TryParse(Environment.ExpandEnvironmentVariables("%pow_batch%"), out   pow_batch))
             {
