@@ -1,11 +1,8 @@
 ﻿using RestSharp;
-using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-
 namespace oschina2022
 {
     internal class Program
@@ -20,49 +17,40 @@ namespace oschina2022
             {
                 pow_batch = pow_batch < 5 ? 5 : pow_batch;
             }
-            Console.WriteLine($"项目ID:{objId}{Environment.NewLine}用户ID:{g_user_id}{Environment.NewLine}:登录信息:{oscid}{Environment.NewLine}{pow_batch*10}个数据提交一次。{Environment.NewLine}");
+            Console.WriteLine($"项目ID:{objId}{Environment.NewLine}用户ID:{g_user_id}{Environment.NewLine}:登录信息:{oscid}{Environment.NewLine}{pow_batch}个数据提交一次。{Environment.NewLine}");
             var proxy = Environment.ExpandEnvironmentVariables("%https_proxy%");
             Console.WriteLine($"CPU数量:{Environment.ProcessorCount} 系统代理:{proxy}");
-            var dt = DateTime.Now;
-            Console.WriteLine($"开始计算{dt.ToString("yyyy-MM-dd HH:mm.ss.ffff")}");
-            ConcurrentQueue<Oscresult> oscresults = new ConcurrentQueue<Oscresult>();
-           
             CancellationTokenSource tokenSource = new CancellationTokenSource();
             var popt = new ParallelOptions()
             {
-               MaxDegreeOfParallelism = Environment.ProcessorCount
+                MaxDegreeOfParallelism = Environment.ProcessorCount
             };
             Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
             {
-                Console.WriteLine("5秒后开始取消");
+                Console.WriteLine("5秒后开始取消...");
                 tokenSource.CancelAfter(TimeSpan.FromSeconds(5));
                 e.Cancel = true;
             };
             do
             {
-
+                var dt = DateTime.Now;
+                Console.WriteLine($"开始计算{dt.ToString("yyyy-MM-dd HH:mm.ss.ffff")}");
+                ConcurrentBag<Oscresult> oscresults = new ConcurrentBag<Oscresult>();
+                int _count = 0;
+                int _scores = 0;
                 Parallel.For(1, pow_batch, popt, _ =>
-            {
-                for (int i = 0; i < 10; i++)
                 {
-                    DateTime dt1 = DateTime.Now;
                     var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
                     if (osc != null)
                     {
-                        oscresults.Append(osc);
-                        Console.WriteLine($"ID:{Task.CurrentId}({Thread.GetCurrentProcessorId()})通过{osc.token}算得{sha1} 热度值{scores},耗时:{DateTime.Now.Subtract(dt1).TotalSeconds}.");
+                        oscresults.Add(osc);
+                        _count++;
+                        _scores++;
                     }
-                    if (tokenSource.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                }
-            });
+                });
                 Console.WriteLine($"计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now.ToString("yyyy-MM-dd HH:mm.ss.ffff")}{Environment.NewLine}");
                 var dt1 = DateTime.Now;
-
-                var client = new RestSharp.RestClient();
-
+                var client = new RestClient();
                 if (!string.IsNullOrEmpty(proxy) && proxy.StartsWith("https", StringComparison.OrdinalIgnoreCase))
                 {
                     client.Options.Proxy = new WebProxy(proxy);
@@ -74,15 +62,14 @@ namespace oschina2022
                 rest.AddJsonBody(oscresults.ToArray());
                 var result = client.Execute(rest);
                 Console.WriteLine($"{result.StatusCode} {result.Content}");
-                Console.WriteLine($"提交完成耗时{DateTime.Now.Subtract(dt1).TotalSeconds}{Environment.NewLine}");
+                Console.WriteLine($"提交完成,总数:{_count},总热度值:{_scores}.耗时{DateTime.Now.Subtract(dt1).TotalSeconds}{Environment.NewLine}");
             } while (!tokenSource.IsCancellationRequested);
-
         }
 
 
         static string  RandomString(int length)
         {
-            const string characters = "abcdefghijklmnopqrstuvwxyz0123456789";
+            const string characters = "abcdefghijklmnopqrstuvwxyz0123456789``!@#$%^&*()_+=-,./?><|\\}]{[";
             return new string(Enumerable.Repeat(characters, length)
               .Select(s => s[Random.Shared.Next(s.Length)]).ToArray());
         }
@@ -95,7 +82,7 @@ namespace oschina2022
             sha1 = string.Empty;
             while (IsOk)
             {
-                var token = RandomString(32);
+                var token = RandomString(16);
                 for (int i = 0; i < 999999; i++)
                 {
                     var genkey = projectid + ":" + oscid + ":" + counter + ":" + token;
