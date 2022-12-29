@@ -30,7 +30,7 @@ namespace oschina2022
             CancellationTokenSource tokenSource = new CancellationTokenSource();
             var popt = new ParallelOptions()
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount
+               MaxDegreeOfParallelism = Environment.ProcessorCount
             };
             Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
             {
@@ -52,7 +52,7 @@ namespace oschina2022
 
             var client = new RestSharp.RestClient();
            
-            if (string.IsNullOrEmpty(proxy))
+            if (!string.IsNullOrEmpty(proxy) && proxy.StartsWith("https", StringComparison.OrdinalIgnoreCase))
             {
                 client.Options.Proxy = new WebProxy(proxy);
             }
@@ -84,7 +84,7 @@ namespace oschina2022
             sha1 = string.Empty;
             while (IsOk)
             {
-                var token = RandomString(24);
+                var token = RandomString(16);
                 for (int i = 0; i < 999999; i++)
                 {
                     var genkey = projectid + ":" + oscid + ":" + counter + ":" + token;
