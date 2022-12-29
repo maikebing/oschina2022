@@ -77,7 +77,7 @@ namespace oschina2022
               .Select(s => s[Random.Shared.Next(s.Length)]).ToArray());
         }
 
-        private static Oscresult? Pow(string oscid, string projectid,out string sha1, out int scores,CancellationToken cancellation)
+        private static Oscresult Pow(string oscid, string projectid,out string sha1, out int scores,CancellationToken cancellation)
         {
             var IsOk = true;
             var counter = 0;
