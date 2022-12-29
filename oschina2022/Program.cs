@@ -1,6 +1,7 @@
 ﻿using RestSharp;
 using System;
 using System.Collections.Concurrent;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -49,14 +50,20 @@ namespace oschina2022
             });
             Console.WriteLine($"计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now.ToString("yyyy-MM-dd HH:mm.ss.ffff")}{Environment.NewLine}");
             var dt1 = DateTime.Now;
+
             var client = new RestSharp.RestClient();
+            var proxy = Environment.ExpandEnvironmentVariables("%https_proxy%");
+            if (string.IsNullOrEmpty(proxy))
+            {
+                client.Options.Proxy = new WebProxy(proxy);
+            }
             RestRequest rest = new RestRequest("https://www.oschina.net/action/api/pow",    Method.Post);
             rest.AddHeader("Content-Type", "application/json;charset=utf-8");
             rest.AddHeader("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36");
             rest.AddHeader("Cookie", $"oscid={oscid}");
             rest.AddJsonBody(oscresults.ToArray());
             var result= client.Execute(rest);
-            Console.WriteLine(result.Content);
+            Console.WriteLine($"{result.StatusCode} {result.Content}" );
             Console.WriteLine($"提交完成耗时{DateTime.Now.Subtract(dt1).TotalSeconds}{Environment.NewLine}");
 
 
