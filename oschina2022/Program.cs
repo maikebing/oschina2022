@@ -21,9 +21,8 @@ namespace oschina2022
                 pow_batch = pow_batch < 5 ? 5 : pow_batch;
             }
             Console.WriteLine($"项目ID:{objId}{Environment.NewLine}用户ID:{g_user_id}{Environment.NewLine}:登录信息:{oscid}{Environment.NewLine}{pow_batch}个数据提交一次。{Environment.NewLine}");
-          
-
-
+            var proxy = Environment.ExpandEnvironmentVariables("%https_proxy%");
+            Console.WriteLine($"CPU数量:{Environment.ProcessorCount} 系统代理:{proxy}");
             var dt = DateTime.Now;
             Console.WriteLine($"开始计算{dt.ToString("yyyy-MM-dd HH:mm.ss.ffff")}");
             ConcurrentQueue<Oscresult> oscresults = new ConcurrentQueue<Oscresult>();
@@ -31,7 +30,7 @@ namespace oschina2022
             CancellationTokenSource tokenSource = new CancellationTokenSource();
             var popt = new ParallelOptions()
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                MaxDegreeOfParallelism = Environment.ProcessorCount
             };
             Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
             {
@@ -52,7 +51,7 @@ namespace oschina2022
             var dt1 = DateTime.Now;
 
             var client = new RestSharp.RestClient();
-            var proxy = Environment.ExpandEnvironmentVariables("%https_proxy%");
+           
             if (string.IsNullOrEmpty(proxy))
             {
                 client.Options.Proxy = new WebProxy(proxy);
