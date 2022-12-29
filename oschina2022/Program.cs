@@ -20,7 +20,7 @@ namespace oschina2022
             {
                 pow_batch = pow_batch < 5 ? 5 : pow_batch;
             }
-            Console.WriteLine($"项目ID:{objId}{Environment.NewLine}用户ID:{g_user_id}{Environment.NewLine}:登录信息:{oscid}{Environment.NewLine}{pow_batch}个数据提交一次。{Environment.NewLine}");
+            Console.WriteLine($"项目ID:{objId}{Environment.NewLine}用户ID:{g_user_id}{Environment.NewLine}:登录信息:{oscid}{Environment.NewLine}{pow_batch*10}个数据提交一次。{Environment.NewLine}");
             var proxy = Environment.ExpandEnvironmentVariables("%https_proxy%");
             Console.WriteLine($"CPU数量:{Environment.ProcessorCount} 系统代理:{proxy}");
             var dt = DateTime.Now;
@@ -38,36 +38,47 @@ namespace oschina2022
                 tokenSource.CancelAfter(TimeSpan.FromSeconds(5));
                 e.Cancel = true;
             };
-            Parallel.For(1, pow_batch, popt, _ =>
+            do
             {
-                var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
-                if (osc != null)
+
+                Parallel.For(1, pow_batch, popt, _ =>
+            {
+                for (int i = 0; i < 10; i++)
                 {
-                    oscresults.Append(osc);
-                    Console.WriteLine($"通过{osc.token}算得{sha1} 热度值{scores}.");
+                    DateTime dt1 = DateTime.Now;
+                    var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
+                    if (osc != null)
+                    {
+                        oscresults.Append(osc);
+                        Console.WriteLine($"ID:{Task.CurrentId}({Thread.GetCurrentProcessorId()})通过{osc.token}算得{sha1} 热度值{scores},耗时:{DateTime.Now.Subtract(dt1).TotalSeconds}.");
+                    }
+                    if (tokenSource.IsCancellationRequested)
+                    {
+                        break;
+                    }
                 }
             });
-            Console.WriteLine($"计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now.ToString("yyyy-MM-dd HH:mm.ss.ffff")}{Environment.NewLine}");
-            var dt1 = DateTime.Now;
+                Console.WriteLine($"计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now.ToString("yyyy-MM-dd HH:mm.ss.ffff")}{Environment.NewLine}");
+                var dt1 = DateTime.Now;
 
-            var client = new RestSharp.RestClient();
-           
-            if (!string.IsNullOrEmpty(proxy) && proxy.StartsWith("https", StringComparison.OrdinalIgnoreCase))
-            {
-                client.Options.Proxy = new WebProxy(proxy);
-            }
-            RestRequest rest = new RestRequest("https://www.oschina.net/action/api/pow",    Method.Post);
-            rest.AddHeader("Content-Type", "application/json;charset=utf-8");
-            rest.AddHeader("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36");
-            rest.AddHeader("Cookie", $"oscid={oscid}");
-            rest.AddJsonBody(oscresults.ToArray());
-            var result= client.Execute(rest);
-            Console.WriteLine($"{result.StatusCode} {result.Content}" );
-            Console.WriteLine($"提交完成耗时{DateTime.Now.Subtract(dt1).TotalSeconds}{Environment.NewLine}");
+                var client = new RestSharp.RestClient();
 
+                if (!string.IsNullOrEmpty(proxy) && proxy.StartsWith("https", StringComparison.OrdinalIgnoreCase))
+                {
+                    client.Options.Proxy = new WebProxy(proxy);
+                }
+                RestRequest rest = new RestRequest("https://www.oschina.net/action/api/pow", Method.Post);
+                rest.AddHeader("Content-Type", "application/json;charset=utf-8");
+                rest.AddHeader("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36");
+                rest.AddHeader("Cookie", $"oscid={oscid}");
+                rest.AddJsonBody(oscresults.ToArray());
+                var result = client.Execute(rest);
+                Console.WriteLine($"{result.StatusCode} {result.Content}");
+                Console.WriteLine($"提交完成耗时{DateTime.Now.Subtract(dt1).TotalSeconds}{Environment.NewLine}");
+            } while (!tokenSource.IsCancellationRequested);
 
         }
- 
+
 
         static string  RandomString(int length)
         {
@@ -84,7 +95,7 @@ namespace oschina2022
             sha1 = string.Empty;
             while (IsOk)
             {
-                var token = RandomString(16);
+                var token = RandomString(32);
                 for (int i = 0; i < 999999; i++)
                 {
                     var genkey = projectid + ":" + oscid + ":" + counter + ":" + token;
