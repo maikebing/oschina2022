@@ -4,19 +4,8 @@
 		<OutputType>Exe</OutputType>
 		<TargetFramework>net7.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<PublishAot>true</PublishAot>
-		<RunAOTCompilation>True</RunAOTCompilation>
-		<!--<TrimMode>full</TrimMode>
-		<PublishTrimmed>true</PublishTrimmed>
-		<TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
-		<PublishReadyToRunEmitSymbols>false</PublishReadyToRunEmitSymbols>
-		<DebuggerSupport>false</DebuggerSupport>
-		<EnableUnsafeUTF7Encoding>true</EnableUnsafeUTF7Encoding>
-		<InvariantGlobalization>true</InvariantGlobalization>
-		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
-		<MetadataUpdaterSupport>true</MetadataUpdaterSupport>
-		<UseSystemResourceKeys>true</UseSystemResourceKeys>
-		<IlcDisableReflection>true</IlcDisableReflection>-->
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishReadyToRun>true</PublishReadyToRun>
 	</PropertyGroup>
 
 	<ItemGroup>

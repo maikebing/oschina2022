@@ -3,11 +3,13 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
+
 namespace oschina2022
 {
-    internal class Program
+    internal static class Program
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             var objId = Environment.ExpandEnvironmentVariables("%objId%");
             var g_user_id = Environment.ExpandEnvironmentVariables("%g_user_id%");
@@ -15,14 +17,16 @@ namespace oschina2022
             Console.WriteLine($"项目ID:{objId}{Environment.NewLine}用户ID:{g_user_id}{Environment.NewLine}:登录信息:{oscid}{Environment.NewLine}。{Environment.NewLine}");
             var proxy = Environment.ExpandEnvironmentVariables("%https_proxy%");
             Console.WriteLine($"CPU数量:{Environment.ProcessorCount} 系统代理:{proxy}");
-            CancellationTokenSource tokenSource = new CancellationTokenSource();
+            CancellationTokenSource tokenSource = new();
             Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
             {
                 Console.WriteLine("5秒后开始取消...");
                 tokenSource.CancelAfter(TimeSpan.FromSeconds(5));
                 e.Cancel = true;
             };
+           
             var client = new RestClient();
+            client.Options.MaxTimeout = (int)TimeSpan.FromMinutes(3).TotalMilliseconds;
             client.AddDefaultHeader("Content-Type", "application/json;charset=utf-8");
             client.AddDefaultHeader("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36");
             client.AddDefaultHeader("Cookie", $"oscid={oscid}");
@@ -34,79 +38,92 @@ namespace oschina2022
             do
             {
                 var dt = DateTime.Now;
-                Console.WriteLine($"线程{Task.CurrentId}开始计算{dt.ToString("yyyy-MM-dd HH:mm.ss.ffff")}");
+                Console.WriteLine($"线程{Task.CurrentId}开始计算{dt:yyyy-MM-dd HH:mm.ss.ffff}");
                 int _count = 0;
                 int _scores = 0;
-                ConcurrentBag<PowDto> oscresults = new ConcurrentBag<PowDto>();
-                Random _random = new Random(DateTime.Now.Second * 100 + DateTime.Now.Microsecond + DateTime.Now.Day + Random.Shared.Next(1000));
-                Parallel.For(1, 31, _ =>
+                ConcurrentBag<PowDto> oscresults = new();
+                Parallel.For(1, 31, new ParallelOptions() { MaxDegreeOfParallelism=Environment.ProcessorCount } _ =>
                 {
                     var dt2 = DateTime.Now;
-                    var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token, _random);
+                    var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
                     if (osc != null)
                     {
                         oscresults.Add(osc);
                         _count++;
                         _scores += scores;
-                        Console.WriteLine($"线程{Thread.CurrentThread.ManagedThreadId}算得热度值{scores}，耗时{DateTime.Now.Subtract(dt2).TotalSeconds}");
+                        Console.WriteLine($"线程{Environment.CurrentManagedThreadId} SHA1:{sha1}  耗时{DateTime.Now.Subtract(dt2).TotalSeconds}");
                     }
                 });
-                Console.WriteLine($"线程{Task.CurrentId}计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now.ToString("yyyy-MM-dd HH:mm.ss.ffff")}{Environment.NewLine}");
+                Console.WriteLine($"线程{Task.CurrentId}计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now:yyyy-MM-dd HH:mm.ss.ffff}{Environment.NewLine}");
 
-                var pow = Task.Run(() =>
+                Task.Run(() =>
                 {
-                    var dt1 = DateTime.Now;
-                    RestRequest rest = new RestRequest("https://www.oschina.net/action/api/pow", Method.Post);
-                    rest.AddJsonBody(oscresults.ToArray());
-                    var result = client.Execute(rest);
-                    var pr = System.Text.Json.JsonSerializer.Deserialize<pow_result>(result.Content);
-                    if (pr.result && pr.data?.Count > 0)
+                    try
                     {
-                        var _sc = pr.data.Sum(p => p.integral);
-                        Console.WriteLine($"线程{Task.CurrentId}提交完成,总数:{_count},期望热度值:{_scores}，获得热度值{_sc}.耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"{result.StatusCode} {result.Content}");
-                    }
-                });
-
-                var pow2 = Task.Run(() =>
-                {
-                    if (DateTime.Now.Subtract(lstcheck).TotalMinutes > 5)
-                    {
-                        lstcheck = DateTime.Now;
                         var dt1 = DateTime.Now;
-                        RestRequest req = new RestRequest($"https://www.oschina.net/action/api/pow_integral?project={objId}", Method.Get);
-                        var rep = client.Execute(req, tokenSource.Token);
-                        Console.WriteLine($"最新热度值:{rep.StatusCode} {rep.Content}耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
+                        RestRequest rest = new("https://www.oschina.net/action/api/pow", Method.Post)
+                        {
+                            Timeout = (int)TimeSpan.FromMinutes(3).TotalMilliseconds
+                        };
+                        rest.AddJsonBody(oscresults.ToArray());
+                        var result = client.Execute(rest);
+                        var jo = JsonNode.Parse(result.Content ?? "{}");
+                        var _integral = jo["data"]?.AsArray().Sum(jn => jn["integral"].AsValue().GetValue<long>());
+                        Console.WriteLine($"计算期望热度{_scores}实际获得热度：{_integral} 服务器返回:{(_integral > 0 ? result.StatusCode.ToString() : result.Content ?? result.ErrorMessage)}耗时{DateTime.Now.Subtract(dt1).TotalSeconds} ");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"查询最新热度时遇到异常{ex.Message}");
                     }
                 });
-                Task.WaitAll(pow, pow2);
+
+                Task.Run(() =>
+               {
+                   if (DateTime.Now.Subtract(lstcheck).TotalMinutes > 5)
+                   {
+                       try
+                       {
+                           lstcheck = DateTime.Now;
+                           var dt1 = DateTime.Now;
+                           RestRequest req = new($"https://www.oschina.net/action/api/pow_integral?project={objId}", Method.Get);
+                           var rep = client.Execute(req, tokenSource.Token);
+                           var jo = JsonNode.Parse(rep.Content ?? "{}");
+                           var _integral = jo["data"]?["integral"]?.AsValue().GetValue<long>();
+                           Console.WriteLine($"最新热度值:{_integral} 服务器返回:{(_integral > 0 ? rep.StatusCode.ToString() : rep.Content ?? rep.ErrorMessage)} 耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
+                       }
+                       catch (Exception ex)
+                       {
+                           Console.WriteLine($"查询最新热度时遇到异常{ex.Message}");
+                       }
+                   }
+               });
             } while (!tokenSource.IsCancellationRequested);
         }
-      
 
-        static string RandomString(int length, Random _random)
+        private static readonly RandomNumberGenerator random = RandomNumberGenerator.Create();
+
+        private static string RandomString(int length)
         {
-            const string characters = "abcdefghijklmnopqrstuvwxyz0123456789";
-            return new string(Enumerable.Repeat(characters, length)
-              .Select(s => s[_random.Next(s.Length)]).ToArray());
+            var buffer = new byte[length];
+            lock (random)
+            {
+                random.GetNonZeroBytes(buffer);
+            }
+            return Convert.ToBase64String(buffer);
         }
 
-        private static PowDto Pow(string oscid, string projectid, out string sha1, out int scores, CancellationToken cancellation, Random _random)
+        private static PowDto Pow(string oscid, string projectid, out string sha1, out int scores, CancellationToken cancellation)
         {
-            var IsOk = true;
             var counter = 0;
             scores = 0;
             sha1 = string.Empty;
-            while (IsOk)
+            while (true)
             {
-                var token =   RandomString(16, _random);
+                var token = RandomString(32);
                 for (int i = 0; i < 999999; i++)
                 {
                     var genkey = projectid + ":" + oscid + ":" + counter + ":" + token;
-                    var testres = string.Join("", SHA1.HashData(Encoding.Default.GetBytes(genkey)).Select(b => b.ToString("x2")));
+                    var testres = string.Concat(SHA1.HashData(Encoding.Default.GetBytes(genkey)).Select(b => b.ToString("x2")));
                     if (cancellation.IsCancellationRequested)
                     {
                         return null;
@@ -126,13 +143,40 @@ namespace oschina2022
                     }
                     if (scores > 0)
                     {
-                        return new PowDto(oscid, projectid, token, counter);
+                        return new PowDto() { user = oscid, project = projectid, token = token, counter = counter };
                     }
                     counter++;
                 }
-
             }
-            return null;
         }
+    }
+
+    public class pow_data
+    {
+        public pow_data()
+        {
+            integral = 0;
+            project = 0;
+            counter = 0;
+            user = 0;
+        }
+
+        public int integral { get; set; }
+
+        public int project { get; set; }
+
+        public int counter { get; set; }
+
+        public int user { get; set; }
+
+        public string token { get; set; }
+    }
+
+    public class PowDto
+    {
+        public string user { get; set; }
+        public string project { get; set; }
+        public string token { get; set; }
+        public int counter { get; set; }
     }
 }
