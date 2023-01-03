@@ -36,33 +36,39 @@ namespace oschina2022
                 var dt = DateTime.Now;
                 Console.WriteLine($"线程{Task.CurrentId}开始计算{dt.ToString("yyyy-MM-dd HH:mm.ss.ffff")}");
                 int _count = 0;
-                 int _scores = 0;
-                ConcurrentBag<Oscresult> oscresults = new ConcurrentBag<Oscresult>();
-                Parallel.For(1, 26,  _ =>
+                int _scores = 0;
+                ConcurrentBag<PowDto> oscresults = new ConcurrentBag<PowDto>();
+                Random _random = new Random(DateTime.Now.Second * 100 + DateTime.Now.Microsecond + DateTime.Now.Day + Random.Shared.Next(1000));
+                Parallel.For(1, 31, _ =>
                 {
                     var dt2 = DateTime.Now;
-                    var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
+                    var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token, _random);
                     if (osc != null)
                     {
-                        lock (oscresults)
-                        {
-                            oscresults.Add(osc);
-                            _count++;
-                            _scores += scores;
-                            Console.WriteLine($"线程{Thread.CurrentThread.ManagedThreadId}算得热度值{scores}，耗时{DateTime.Now.Subtract(dt2).TotalSeconds}");
-                        }
+                        oscresults.Add(osc);
+                        _count++;
+                        _scores += scores;
+                        Console.WriteLine($"线程{Thread.CurrentThread.ManagedThreadId}算得热度值{scores}，耗时{DateTime.Now.Subtract(dt2).TotalSeconds}");
                     }
                 });
                 Console.WriteLine($"线程{Task.CurrentId}计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now.ToString("yyyy-MM-dd HH:mm.ss.ffff")}{Environment.NewLine}");
 
-               var pow= Task.Run(() =>
+                var pow = Task.Run(() =>
                 {
                     var dt1 = DateTime.Now;
                     RestRequest rest = new RestRequest("https://www.oschina.net/action/api/pow", Method.Post);
                     rest.AddJsonBody(oscresults.ToArray());
                     var result = client.Execute(rest);
-                    Console.WriteLine($"{result.StatusCode} {result.Content}");
-                    Console.WriteLine($"线程{Task.CurrentId}提交完成,总数:{_count},总热度值:{_scores}.耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
+                    var pr = System.Text.Json.JsonSerializer.Deserialize<pow_result>(result.Content);
+                    if (pr.result && pr.data?.Count > 0)
+                    {
+                        var _sc = pr.data.Sum(p => p.integral);
+                        Console.WriteLine($"线程{Task.CurrentId}提交完成,总数:{_count},期望热度值:{_scores}，获得热度值{_sc}.耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"{result.StatusCode} {result.Content}");
+                    }
                 });
 
                 var pow2 = Task.Run(() =>
@@ -79,16 +85,16 @@ namespace oschina2022
                 Task.WaitAll(pow, pow2);
             } while (!tokenSource.IsCancellationRequested);
         }
+      
 
-
-        static string RandomString(int length)
+        static string RandomString(int length, Random _random)
         {
-            const string characters = "abcdefghijklmnopqrstuvwxyz0123456789``!@#$%^&*()_+=-,./?><|\\}]{[";
+            const string characters = "abcdefghijklmnopqrstuvwxyz0123456789";
             return new string(Enumerable.Repeat(characters, length)
-              .Select(s => s[Random.Shared.Next(s.Length)]).ToArray());
+              .Select(s => s[_random.Next(s.Length)]).ToArray());
         }
 
-        private static Oscresult Pow(string oscid, string projectid, out string sha1, out int scores, CancellationToken cancellation)
+        private static PowDto Pow(string oscid, string projectid, out string sha1, out int scores, CancellationToken cancellation, Random _random)
         {
             var IsOk = true;
             var counter = 0;
@@ -96,7 +102,7 @@ namespace oschina2022
             sha1 = string.Empty;
             while (IsOk)
             {
-                var token = RandomString(16);
+                var token =   RandomString(16, _random);
                 for (int i = 0; i < 999999; i++)
                 {
                     var genkey = projectid + ":" + oscid + ":" + counter + ":" + token;
@@ -105,26 +111,26 @@ namespace oschina2022
                     {
                         return null;
                     }
-                    if (testres.StartsWith("00000") || testres.ToLower().Contains("oschina", StringComparison.OrdinalIgnoreCase))
+                    sha1 = testres;
+                    if (sha1.StartsWith("000000"))
                     {
-                        sha1 = testres;
-                        if (sha1.StartsWith("000000"))
-                        {
-                            scores = 10;
-                        }
-                        //else if (testres.ToLower().Contains("oschina", StringComparison.OrdinalIgnoreCase))
-                        //{
-                        //    scores = 10000;
-                        //}
-                        else
-                        {
-                            scores = 1;
-                        }
-                        return new Oscresult(oscid, projectid, token, counter);
+                        scores = 10;
+                    }
+                    else if (sha1.StartsWith("00000"))
+                    {
+                        scores = 1;
+                    }
+                    else if (testres.Contains("oschina", StringComparison.OrdinalIgnoreCase))
+                    {
+                        scores = 10000;
+                    }
+                    if (scores > 0)
+                    {
+                        return new PowDto(oscid, projectid, token, counter);
                     }
                     counter++;
-
                 }
+
             }
             return null;
         }
