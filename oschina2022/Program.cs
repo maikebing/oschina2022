@@ -1,9 +1,15 @@
-﻿using RestSharp;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
+using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using System.Text.Unicode;
 
 namespace oschina2022
 {
@@ -24,15 +30,18 @@ namespace oschina2022
                 tokenSource.CancelAfter(TimeSpan.FromSeconds(5));
                 e.Cancel = true;
             };
-           
-            var client = new RestClient();
-            client.Options.MaxTimeout = (int)TimeSpan.FromMinutes(3).TotalMilliseconds;
-            client.AddDefaultHeader("Content-Type", "application/json;charset=utf-8");
-            client.AddDefaultHeader("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36");
-            client.AddDefaultHeader("Cookie", $"oscid={oscid}");
+            System.Net.Http.HttpClient client = new HttpClient();
+            //var req = new HttpRequestMessage() { Method = HttpMethod.Post };
+            //http.Send(new HttpRequestMessage() { Content = })
+            //http.PostAsync("", HttpContent)
+            client.Timeout = TimeSpan.FromMinutes(3);
+            client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue ("application/json"));
+            client.DefaultRequestHeaders.AcceptCharset.Add(new System.Net.Http.Headers.StringWithQualityHeaderValue("utf-8"));
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36");
+            client.DefaultRequestHeaders.Add("Cookie", $"oscid={oscid}");
             if (!string.IsNullOrEmpty(proxy) && proxy.StartsWith("https", StringComparison.OrdinalIgnoreCase))
             {
-                client.Options.Proxy = new WebProxy(proxy);
+             //   client.DefaultRequestVersion..Proxy = new WebProxy(proxy);
             }
             var lstcheck = DateTime.MinValue;
             do
@@ -42,7 +51,7 @@ namespace oschina2022
                 int _count = 0;
                 int _scores = 0;
                 ConcurrentBag<PowDto> oscresults = new();
-                Parallel.For(1, 31, new ParallelOptions() { MaxDegreeOfParallelism=Environment.ProcessorCount } _ =>
+                Parallel.For(1, 31, _ =>
                 {
                     var dt2 = DateTime.Now;
                     var osc = Pow(g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
@@ -56,28 +65,36 @@ namespace oschina2022
                 });
                 Console.WriteLine($"线程{Task.CurrentId}计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now:yyyy-MM-dd HH:mm.ss.ffff}{Environment.NewLine}");
 
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
                     try
                     {
                         var dt1 = DateTime.Now;
-                        RestRequest rest = new("https://www.oschina.net/action/api/pow", Method.Post)
+                        HttpRequestMessage rest = new(HttpMethod.Post, "https://www.oschina.net/action/api/pow");
+                        JsonArray array = new JsonArray();
+                        oscresults.ToList().ForEach(p =>
                         {
-                            Timeout = (int)TimeSpan.FromMinutes(3).TotalMilliseconds
-                        };
-                        rest.AddJsonBody(oscresults.ToArray());
-                        var result = client.Execute(rest);
-                        var jo = JsonNode.Parse(result.Content ?? "{}");
-                        var _integral = jo["data"]?.AsArray().Sum(jn => jn["integral"].AsValue().GetValue<long>());
-                        Console.WriteLine($"计算期望热度{_scores}实际获得热度：{_integral} 服务器返回:{(_integral > 0 ? result.StatusCode.ToString() : result.Content ?? result.ErrorMessage)}耗时{DateTime.Now.Subtract(dt1).TotalSeconds} ");
+                            var jo = new JsonObject();
+                            jo.Add("user", p.user);
+                            jo.Add("token", p.token);
+                            jo.Add("project", p.project);
+                            jo.Add("counter", p.counter);
+                            array.Add(jo.Root);
+                        });
+                        rest.Content=new  StringContent(array.ToString());
+                        var result =await client.SendAsync(rest);
+                        var context =await result.Content?.ReadAsStringAsync();
+                        var jo = JsonNode.Parse(context ?? "{}");
+                        var _integral = jo["data"]?.AsArray().Sum(jn => jn["integral"].GetValue<long>());
+                        Console.WriteLine($"计算期望热度{_scores}实际获得热度：{_integral} 服务器返回:{(_integral > 0 ? result.StatusCode.ToString() : context ?? result.ReasonPhrase)}耗时{DateTime.Now.Subtract(dt1).TotalSeconds} ");
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"查询最新热度时遇到异常{ex.Message}");
+                        Console.WriteLine($"提交计算结果时遇到错误:{ex.Message}");
                     }
                 });
 
-                Task.Run(() =>
+                Task.Run(async () =>
                {
                    if (DateTime.Now.Subtract(lstcheck).TotalMinutes > 5)
                    {
@@ -85,11 +102,12 @@ namespace oschina2022
                        {
                            lstcheck = DateTime.Now;
                            var dt1 = DateTime.Now;
-                           RestRequest req = new($"https://www.oschina.net/action/api/pow_integral?project={objId}", Method.Get);
-                           var rep = client.Execute(req, tokenSource.Token);
-                           var jo = JsonNode.Parse(rep.Content ?? "{}");
+                           HttpRequestMessage rest = new(HttpMethod.Get,  $"https://www.oschina.net/action/api/pow_integral?project={objId}");
+                           var rep = await client.SendAsync(rest);
+                           var context = await rep.Content?.ReadAsStringAsync();
+                           var jo = JsonNode.Parse(context ?? "{}");
                            var _integral = jo["data"]?["integral"]?.AsValue().GetValue<long>();
-                           Console.WriteLine($"最新热度值:{_integral} 服务器返回:{(_integral > 0 ? rep.StatusCode.ToString() : rep.Content ?? rep.ErrorMessage)} 耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
+                           Console.WriteLine($"最新热度值:{_integral} 服务器返回:{(_integral > 0 ? rep.StatusCode.ToString() : context ?? rep.ReasonPhrase)} 耗时{DateTime.Now.Subtract(dt1).TotalSeconds}");
                        }
                        catch (Exception ex)
                        {
@@ -151,32 +169,14 @@ namespace oschina2022
         }
     }
 
-    public class pow_data
-    {
-        public pow_data()
-        {
-            integral = 0;
-            project = 0;
-            counter = 0;
-            user = 0;
-        }
+     
 
-        public int integral { get; set; }
-
-        public int project { get; set; }
-
-        public int counter { get; set; }
-
-        public int user { get; set; }
-
-        public string token { get; set; }
-    }
-
-    public class PowDto
+    public class PowDto 
     {
         public string user { get; set; }
         public string project { get; set; }
         public string token { get; set; }
         public int counter { get; set; }
+    
     }
 }

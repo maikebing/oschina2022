@@ -4,13 +4,24 @@
 		<OutputType>Exe</OutputType>
 		<TargetFramework>net7.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<PublishSingleFile>true</PublishSingleFile>
-		<PublishReadyToRun>true</PublishReadyToRun>
+		<!--<PublishSingleFile>true</PublishSingleFile>
+		<PublishReadyToRun>true</PublishReadyToRun>-->
+		<PublishAot>true</PublishAot>
+		<RunAOTCompilation>True</RunAOTCompilation>
+		<TrimMode>full</TrimMode>
+		<PublishTrimmed>true</PublishTrimmed>
+		<TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
+		<PublishReadyToRunEmitSymbols>false</PublishReadyToRunEmitSymbols>
+		
+		
+		<DebuggerSupport>false</DebuggerSupport>
+		<EnableUnsafeUTF7Encoding>true</EnableUnsafeUTF7Encoding>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+		<MetadataUpdaterSupport>true</MetadataUpdaterSupport>
+		<UseSystemResourceKeys>true</UseSystemResourceKeys>
+		<!--<IlcDisableReflection>true</IlcDisableReflection>-->
 	</PropertyGroup>
-
-	<ItemGroup>
-		<PackageReference Include="RestSharp" Version="108.0.3" />
-	</ItemGroup>
 
 	<ItemGroup>
 	  <None Update="run.sh">
