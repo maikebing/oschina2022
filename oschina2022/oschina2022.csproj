@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<TargetFramework>net7.0</TargetFramework>
@@ -12,27 +11,18 @@
 		<PublishTrimmed>true</PublishTrimmed>
 		<TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
 		<PublishReadyToRunEmitSymbols>false</PublishReadyToRunEmitSymbols>
-		
-		
 		<DebuggerSupport>false</DebuggerSupport>
 		<EnableUnsafeUTF7Encoding>true</EnableUnsafeUTF7Encoding>
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
 		<MetadataUpdaterSupport>true</MetadataUpdaterSupport>
 		<UseSystemResourceKeys>true</UseSystemResourceKeys>
-		<!--<IlcDisableReflection>true</IlcDisableReflection>-->
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <None Update="config.json">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
-	  <None Update="run.sh">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
-	  <None Update="run.cmd">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
+		<None Update="config.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
 </Project>
