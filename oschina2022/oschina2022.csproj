@@ -5,6 +5,7 @@
 		<!--<ImplicitUsings>enable</ImplicitUsings>-->
 		<!--<PublishSingleFile>true</PublishSingleFile>
 		<PublishReadyToRun>true</PublishReadyToRun>-->
+		<TieredPGO>true</TieredPGO>
 		<PublishAot>true</PublishAot>
 		<RunAOTCompilation>True</RunAOTCompilation>
 		<TrimMode>full</TrimMode>
