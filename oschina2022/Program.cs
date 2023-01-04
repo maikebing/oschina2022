@@ -1,17 +1,29 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+ 
 
-RandomNumberGenerator random = RandomNumberGenerator.Create();
+char[] constant =
+{
+        '0','1','2','3','4','5','6','7','8','9',
+        'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'
+      };
 var jd = JsonNode.Parse(System.IO.File.ReadAllText("config.json"));
 var objId = jd["project"]?.GetValue<string>();
 var proxy = jd["proxy"]?.GetValue<string>();
@@ -55,19 +67,16 @@ do
     Console.WriteLine($"线程{Task.CurrentId}开始计算{dt:yyyy-MM-dd HH:mm.ss.ffff}");
     int _count = 0;
     int _scores = 0;
-
-    var _par = _is_full20w ? 100 : 30;
-
-    Parallel.For(0, _par, _ =>
+    Parallel.For(0, 30, _ =>
     {
         var dt2 = DateTime.Now;
-        var osc = Pow(user.g_user_id, objId, out string sha1, out int scores, tokenSource.Token);
+        var osc = Pow(user.g_user_id, objId, out string sha1,  out int scores, tokenSource.Token);
         if (osc != null)
         {
             oscresults.Enqueue(osc);
             _count++;
             _scores += scores;
-            Console.WriteLine($"线程{Environment.CurrentManagedThreadId} SHA1:{sha1} 获得{scores}热度值 耗时{DateTime.Now.Subtract(dt2).TotalSeconds}");
+            Console.WriteLine($"线程{Environment.CurrentManagedThreadId} {sha1}  获得{scores}热度值 耗时{DateTime.Now.Subtract(dt2).TotalSeconds}");
         }
     });
     Console.WriteLine($"线程{Task.CurrentId}计算完成耗时{DateTime.Now.Subtract(dt).TotalSeconds}{Environment.NewLine}开始提交{DateTime.Now:yyyy-MM-dd HH:mm.ss.ffff}{Environment.NewLine}");
@@ -114,48 +123,56 @@ do
     ReloadInfo(objId, client);
 } while (!tokenSource.IsCancellationRequested);
 
-string RandomString(int length)
+byte[] RandomString(int length)
 {
-    var buffer = new byte[length];
-    lock (random)
+
+    byte[] buffer = new byte[length];
+    for (int i = 0; i < length; i++)
     {
-        random.GetNonZeroBytes(buffer);
+        buffer[i]= (byte)constant[RandomNumberGenerator.GetInt32(constant.Length)];
     }
-    return Convert.ToBase64String(buffer);
+    return buffer;
 }
 
-PowDto Pow(string oscid, string projectid, out string sha1, out int scores, CancellationToken cancellation)
+PowDto Pow(string oscid, string projectid, out string sha1  ,out int scores, CancellationToken cancellation)
 {
     var counter = 0;
     scores = 0;
+    var _tokenlen = 16;
     sha1 = string.Empty;
+    var _head = Encoding.ASCII.GetBytes(projectid + ":" + oscid + ":").AsSpan();
     while (true)
     {
-        var token = RandomString(32);
+        var token = RandomString(_tokenlen);
         for (int i = 0; i < 999999; i++)
         {
-            var genkey = projectid + ":" + oscid + ":" + counter + ":" + token;
-            var testres = string.Concat(SHA1.HashData(Encoding.Default.GetBytes(genkey)).Select(b => b.ToString("x2")));
             if (cancellation.IsCancellationRequested)
             {
                 return null;
             }
-            sha1 = testres;
-            if (sha1.StartsWith("000000"))
+            var _c = Encoding.ASCII.GetBytes(counter.ToString()).AsSpan();
+            Span<byte> bytes = new byte[_head.Length + _tokenlen + 1 + _c.Length];
+            _head.CopyTo(bytes);
+            _c.CopyTo(bytes.Slice(_head.Length));
+            bytes[_head.Length + _c.Length] = (byte)':';
+            token.CopyTo(bytes.Slice( _head.Length + _c.Length + 1));
+            var _bin = SHA1.HashData(bytes);
+            if (_bin[0]==0 && _bin[1]==0 && _bin[2]==0)
             {
                 scores = 10;
             }
-            else if (!_is_full20w &&  sha1.StartsWith("00000"))
+            else if (!_is_full20w && _bin[0] == 0 && _bin[1] == 0 && (byte)((_bin[2] >> 4)) == 0)
             {
                 scores = 1;
             }
-            else if (testres.Contains("oschina", StringComparison.OrdinalIgnoreCase))
-            {
-                scores = 10000;
-            }
+            //else if (testres.Contains("oschina", StringComparison.OrdinalIgnoreCase))
+            //{
+            //    scores = 10000;
+            //}
             if (scores > 0)
             {
-                return new PowDto() { user = oscid, project = projectid, token = token, counter = counter };
+                sha1 =Convert.ToHexString(_bin);
+                return new PowDto() { user = oscid, project = projectid, token = Encoding.ASCII.GetString( token), counter = counter };
             }
             counter++;
         }
